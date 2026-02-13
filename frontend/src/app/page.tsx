@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import TaskStats from "@/components/TaskStats";
 
 const MetricsChart = dynamic(() => import("@/components/MetricsChart"), { ssr: false });
+const GarminDashboard = dynamic(() => import("@/components/GarminDashboard"), { ssr: false });
 
 interface Task {
   id: string;
@@ -124,6 +125,9 @@ export default function Home() {
 
       {/* Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+        {/* Sport / Garmin Cards */}
+        <GarminDashboard />
 
         {/* System Status */}
         <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6">

@@ -1,4 +1,4 @@
-use axum::{routing::{get, delete}, Router, Json};
+use axum::{routing::{get, delete, post}, Router, Json};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 use std::net::SocketAddr;
@@ -7,8 +7,7 @@ use tower_http::cors::CorsLayer;
 mod db;
 mod api;
 
-use api::tasks;
-use api::metrics;
+use api::{tasks, metrics, sync};
 
 #[tokio::main]
 async fn main() {
@@ -22,21 +21,13 @@ async fn main() {
         paths(
             health_check,
             sys_schema,
-            tasks::list_tasks,
-            tasks::create_task,
-            tasks::get_task,
-            tasks::update_task,
-            tasks::delete_task,
-            metrics::list_metrics,
-            metrics::create_metric,
-            metrics::delete_metric,
+            tasks::list_tasks, tasks::create_task, tasks::get_task, tasks::update_task, tasks::delete_task,
+            metrics::list_metrics, metrics::create_metric, metrics::delete_metric,
+            sync::sync_garmin, sync::sync_usage, sync::garmin_latest,
         ),
         components(schemas(
-            tasks::Task,
-            tasks::CreateTask,
-            tasks::UpdateTask,
-            metrics::Metric,
-            metrics::CreateMetric,
+            tasks::Task, tasks::CreateTask, tasks::UpdateTask,
+            metrics::Metric, metrics::CreateMetric,
         ))
     )]
     struct ApiDoc;
@@ -45,12 +36,14 @@ async fn main() {
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/health", get(health_check))
         .route("/sys/schema", get(sys_schema))
-        // Tasks CRUD
         .route("/tasks", get(tasks::list_tasks).post(tasks::create_task))
         .route("/tasks/:id", get(tasks::get_task).put(tasks::update_task).delete(tasks::delete_task))
-        // Metrics CRUD
         .route("/metrics", get(metrics::list_metrics).post(metrics::create_metric))
         .route("/metrics/:id", delete(metrics::delete_metric))
+        // Sync endpoints
+        .route("/sync/garmin", post(sync::sync_garmin))
+        .route("/sync/usage", post(sync::sync_usage))
+        .route("/garmin/latest", get(sync::garmin_latest))
         .layer(CorsLayer::permissive())
         .with_state(pool);
 

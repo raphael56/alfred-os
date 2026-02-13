@@ -21,3 +21,7 @@
 ### D005 - Docker Compose pour orchestration
 **Choix:** docker-compose v3.8
 **Raison:** Simplicité, réseau isolé, hot-reload via bind mounts. Pas besoin de K8s pour un dashboard perso.
+
+### D006 - Garmin sync via bridge script
+**Choix:** Réutiliser garmin-sync.py d'alfred-dashboard + POST vers /sync/garmin
+**Raison:** Le travail de connexion Garmin Connect est déjà fait. On crée un pont plutôt que de recoder. Les données sont décomposées en métriques individuelles côté backend Rust pour requêtes rapides.
