@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # --- DATABASE ---
+  db:
+    image: ankane/pgvector:v0.5.1
+    container_name: alfred-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: alfred
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-alfredsupersecret}
+      POSTGRES_DB: alfred_core
+    volumes:
+      - ./persistence/pg_data:/var/lib/postgresql/data
+    networks:
+      - alfred-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alfred"]
+      interval: 5s
+      retries: 5
+
+  # --- BACKEND (RUST) ---
+  backend:
+    build: ./backend
+    container_name: alfred-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://alfred:${DB_PASSWORD:-alfredsupersecret}@db:5432/alfred_core
+      RUST_LOG: info
+      SERVER_PORT: "8080"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8080:8080"
+    networks:
+      - alfred-net
+
+  # --- FRONTEND (NEXT.JS) ---
+  frontend:
+    build: ./frontend
+    container_name: alfred-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      API_INTERNAL_URL: http://backend:8080
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    networks:
+      - alfred-net
+
+networks:
+  alfred-net:
+    driver: bridge
