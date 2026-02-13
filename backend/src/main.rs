@@ -22,7 +22,7 @@ async fn main() {
             health_check,
             sys_schema,
             tasks::list_tasks, tasks::create_task, tasks::get_task, tasks::update_task, tasks::delete_task,
-            metrics::list_metrics, metrics::create_metric, metrics::delete_metric,
+            metrics::list_metrics, metrics::create_metric, metrics::delete_metric, metrics::collect_system_metrics,
             sync::sync_garmin, sync::sync_usage, sync::garmin_latest,
         ),
         components(schemas(
@@ -40,6 +40,7 @@ async fn main() {
         .route("/tasks/:id", get(tasks::get_task).put(tasks::update_task).delete(tasks::delete_task))
         .route("/metrics", get(metrics::list_metrics).post(metrics::create_metric))
         .route("/metrics/:id", delete(metrics::delete_metric))
+        .route("/metrics/system", post(metrics::collect_system_metrics))
         // Sync endpoints
         .route("/sync/garmin", post(sync::sync_garmin))
         .route("/sync/usage", post(sync::sync_usage))

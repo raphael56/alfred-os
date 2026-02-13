@@ -6,6 +6,7 @@ import TaskStats from "@/components/TaskStats";
 
 const MetricsChart = dynamic(() => import("@/components/MetricsChart"), { ssr: false });
 const GarminDashboard = dynamic(() => import("@/components/GarminDashboard"), { ssr: false });
+const SystemMetrics = dynamic(() => import("@/components/SystemMetrics"), { ssr: false });
 
 interface Task {
   id: string;
@@ -31,6 +32,9 @@ export default function Home() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [newTask, setNewTask] = useState("");
   const [tables, setTables] = useState<string[]>([]);
+  const [taskFilter, setTaskFilter] = useState<string>("all");
+  const [metricForm, setMetricForm] = useState({ category: "", key: "", value: "" });
+  const [showMetricForm, setShowMetricForm] = useState(false);
 
   const fetchAll = useCallback(() => {
     fetch("/api/health").then(r => r.json()).then(d => setHealth(d.status)).catch(() => setHealth("offline"));
@@ -70,6 +74,22 @@ export default function Home() {
     await fetch(`/api/tasks/${id}`, { method: "DELETE" });
     fetchAll();
   };
+
+  const addMetric = async () => {
+    if (!metricForm.category || !metricForm.key || !metricForm.value) return;
+    let val: any = metricForm.value;
+    try { val = JSON.parse(val); } catch { val = isNaN(Number(val)) ? val : Number(val); }
+    await fetch("/api/metrics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: metricForm.category, key: metricForm.key, value: val }),
+    });
+    setMetricForm({ category: "", key: "", value: "" });
+    setShowMetricForm(false);
+    fetchAll();
+  };
+
+  const filteredTasks = taskFilter === "all" ? tasks : tasks.filter(t => t.status === taskFilter);
 
   const seedMetrics = async () => {
     const categories = [
@@ -161,9 +181,22 @@ export default function Home() {
         {/* Task Stats */}
         <TaskStats tasks={tasks} />
 
+        {/* System Health */}
+        <SystemMetrics />
+
         {/* Tasks List */}
         <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6 lg:row-span-2">
-          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-4">Tasks</h2>
+          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Tasks</h2>
+          <div className="flex gap-1 mb-3">
+            {["all", "todo", "in_progress", "done"].map((f) => (
+              <button key={f} onClick={() => setTaskFilter(f)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  taskFilter === f ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                }`}>
+                {f === "all" ? "All" : f === "in_progress" ? "Active" : f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
           <div className="flex gap-2 mb-4">
             <input
               className="flex-1 rounded-lg bg-gray-800 border border-gray-700 px-4 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors"
@@ -180,8 +213,8 @@ export default function Home() {
             </button>
           </div>
           <div className="space-y-2 max-h-[500px] overflow-y-auto">
-            {tasks.length === 0 && <p className="text-gray-600 text-sm">No tasks yet.</p>}
-            {tasks.map((t) => (
+            {filteredTasks.length === 0 && <p className="text-gray-600 text-sm">No tasks{taskFilter !== "all" ? ` (${taskFilter})` : ""}.</p>}
+            {filteredTasks.map((t) => (
               <div key={t.id} className="flex items-center gap-3 rounded-lg bg-gray-800/50 px-4 py-3 group">
                 <button
                   onClick={() => cycleStatus(t)}
@@ -218,7 +251,30 @@ export default function Home() {
 
         {/* Recent Metrics Table */}
         <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6">
-          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-4">Latest Metrics</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Latest Metrics</h2>
+            <button onClick={() => setShowMetricForm(!showMetricForm)}
+              className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+              {showMetricForm ? "Cancel" : "+ Add"}
+            </button>
+          </div>
+          {showMetricForm && (
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <input className="rounded-lg bg-gray-800 border border-gray-700 px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                placeholder="category" value={metricForm.category}
+                onChange={(e) => setMetricForm({ ...metricForm, category: e.target.value })} />
+              <input className="rounded-lg bg-gray-800 border border-gray-700 px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                placeholder="key" value={metricForm.key}
+                onChange={(e) => setMetricForm({ ...metricForm, key: e.target.value })} />
+              <div className="flex gap-1">
+                <input className="flex-1 rounded-lg bg-gray-800 border border-gray-700 px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                  placeholder="value" value={metricForm.value}
+                  onChange={(e) => setMetricForm({ ...metricForm, value: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && addMetric()} />
+                <button onClick={addMetric} className="rounded-lg bg-blue-600 hover:bg-blue-500 px-2 py-1 text-xs font-medium transition-colors">OK</button>
+              </div>
+            </div>
+          )}
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {metrics.length === 0 && <p className="text-gray-600 text-sm">No metrics recorded.</p>}
             {metrics.slice(0, 8).map((m) => (

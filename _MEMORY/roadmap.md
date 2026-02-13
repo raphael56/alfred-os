@@ -16,8 +16,12 @@
 - [x] _SKILLS/sync-garmin.sh (bridge alfred-dashboard -> Alfred OS)
 - [x] Frontend: GarminDashboard (race countdown, fitness rings, training load, body, activities)
 
+- [x] Collecte metriques systeme: POST /metrics/system (CPU, memory, disk via /proc)
+- [x] _SKILLS/collect-system.sh
+- [x] Dashboard: SystemMetrics component (gauge bars + mini sparkline history)
+- [x] Dashboard: Task filters (All/Todo/Active/Done) + formulaire ajout metrique
+
 ## Todo
-- [ ] Ameliorer dashboard (filtres tasks, formulaire ajout metrique, pagination)
-- [ ] Cron automatique garmin-sync (systemd timer ou cron)
-- [ ] Collecte metriques systeme auto (cpu, memory, disk)
+- [ ] Cron automatique garmin-sync + collect-system (systemd timer)
 - [ ] Authentification (si expose au-dela Tailscale)
+- [ ] pgvector: mémoire sémantique pour OpenClaw RAG
