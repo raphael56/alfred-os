@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 interface GarminData {
   heart_rate?: { resting?: number; max?: number; zones?: any };
@@ -58,17 +58,31 @@ function ProgressRing({ value, max, label, unit, color }: { value: number; max: 
 
 export default function GarminDashboard() {
   const [data, setData] = useState<GarminData | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+
+  const loadData = useCallback(() => {
+    fetch("/api/garmin/latest").then((r) => r.json()).then(setData).catch(() => {});
+  }, []);
+
+  const triggerSync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const resp = await fetch("/api/sync/garmin/refresh", { method: "POST" });
+      const result = await resp.json();
+      if (result.status === "refreshed") {
+        setLastSync(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
+        loadData();
+      }
+    } catch {}
+    setSyncing(false);
+  }, [loadData]);
 
   useEffect(() => {
-    fetch("/api/garmin/latest")
-      .then((r) => r.json())
-      .then(setData)
-      .catch(() => {});
-    const interval = setInterval(() => {
-      fetch("/api/garmin/latest").then((r) => r.json()).then(setData).catch(() => {});
-    }, 30000);
+    loadData();
+    const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadData]);
 
   if (!data) return null;
 
@@ -83,22 +97,47 @@ export default function GarminDashboard() {
 
   return (
     <>
-      {/* Race Countdown */}
-      {race && raceDays !== null && raceDays > 0 && (
-        <div className="rounded-2xl border border-orange-500/30 bg-gradient-to-br from-orange-500/10 to-gray-900 p-6 md:col-span-2 lg:col-span-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-medium text-orange-400 uppercase tracking-wider mb-1">Next Race</h2>
-              <div className="text-2xl font-bold">{race.name}</div>
-              <div className="text-sm text-gray-400 mt-1">{race.distance} &middot; {race.date}</div>
-            </div>
-            <div className="text-right">
-              <div className="text-5xl font-black text-orange-400">{raceDays}</div>
-              <div className="text-sm text-gray-400">days to go</div>
-            </div>
+      {/* Race Countdown + Sync Button */}
+      <div className="rounded-2xl border border-orange-500/30 bg-gradient-to-br from-orange-500/10 to-gray-900 p-6 md:col-span-2 lg:col-span-3">
+        <div className="flex items-center justify-between">
+          <div>
+            {race && raceDays !== null && raceDays > 0 ? (
+              <>
+                <h2 className="text-sm font-medium text-orange-400 uppercase tracking-wider mb-1">Next Race</h2>
+                <div className="text-2xl font-bold">{race.name}</div>
+                <div className="text-sm text-gray-400 mt-1">{race.distance} &middot; {race.date}</div>
+              </>
+            ) : (
+              <h2 className="text-sm font-medium text-orange-400 uppercase tracking-wider">Garmin Sport</h2>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            {race && raceDays !== null && raceDays > 0 && (
+              <div className="text-right">
+                <div className="text-5xl font-black text-orange-400">{raceDays}</div>
+                <div className="text-sm text-gray-400">days to go</div>
+              </div>
+            )}
+            <button
+              onClick={triggerSync}
+              disabled={syncing}
+              className={`shrink-0 flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+                syncing
+                  ? "bg-orange-500/20 text-orange-300 cursor-wait"
+                  : "bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20 hover:border-orange-500/50"
+              }`}
+            >
+              <svg className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {syncing ? "Syncing..." : "Sync Garmin"}
+            </button>
           </div>
         </div>
-      )}
+        {lastSync && (
+          <div className="text-xs text-gray-500 mt-2 text-right">Last sync: {lastSync}</div>
+        )}
+      </div>
 
       {/* Key Fitness Metrics */}
       <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6">

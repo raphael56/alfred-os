@@ -21,7 +21,10 @@
 - [x] Dashboard: SystemMetrics component (gauge bars + mini sparkline history)
 - [x] Dashboard: Task filters (All/Todo/Active/Done) + formulaire ajout metrique
 
+- [x] Bouton Sync Garmin sur le dashboard (POST /sync/garmin/refresh via volume monté)
+- [x] Cron automatique: systemd timers (garmin 30min, system metrics 5min)
+- [x] _SKILLS/cron-setup.sh
+
 ## Todo
-- [ ] Cron automatique garmin-sync + collect-system (systemd timer)
 - [ ] Authentification (si expose au-dela Tailscale)
 - [ ] pgvector: mémoire sémantique pour OpenClaw RAG

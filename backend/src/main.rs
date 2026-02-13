@@ -23,7 +23,7 @@ async fn main() {
             sys_schema,
             tasks::list_tasks, tasks::create_task, tasks::get_task, tasks::update_task, tasks::delete_task,
             metrics::list_metrics, metrics::create_metric, metrics::delete_metric, metrics::collect_system_metrics,
-            sync::sync_garmin, sync::sync_usage, sync::garmin_latest,
+            sync::sync_garmin, sync::sync_usage, sync::garmin_latest, sync::refresh_garmin,
         ),
         components(schemas(
             tasks::Task, tasks::CreateTask, tasks::UpdateTask,
@@ -44,6 +44,7 @@ async fn main() {
         // Sync endpoints
         .route("/sync/garmin", post(sync::sync_garmin))
         .route("/sync/usage", post(sync::sync_usage))
+        .route("/sync/garmin/refresh", post(sync::refresh_garmin))
         .route("/garmin/latest", get(sync::garmin_latest))
         .layer(CorsLayer::permissive())
         .with_state(pool);

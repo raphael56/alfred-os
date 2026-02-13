@@ -25,3 +25,11 @@
 ### D006 - Garmin sync via bridge script
 **Choix:** Réutiliser garmin-sync.py d'alfred-dashboard + POST vers /sync/garmin
 **Raison:** Le travail de connexion Garmin Connect est déjà fait. On crée un pont plutôt que de recoder. Les données sont décomposées en métriques individuelles côté backend Rust pour requêtes rapides.
+
+### D007 - Volume monté pour refresh Garmin
+**Choix:** Monter /home/raphael56/alfred-dashboard/data en read-only dans le container backend
+**Raison:** Le bouton Sync du dashboard appelle POST /sync/garmin/refresh qui lit directement garmin.json depuis le volume monté. Pas besoin d'exécuter des scripts Python depuis Docker.
+
+### D008 - Systemd user timers pour cron
+**Choix:** systemd --user timers plutôt que crontab
+**Raison:** Persistent=true, logging natif via journalctl, pas besoin de sudo. Garmin toutes les 30min, system metrics toutes les 5min.

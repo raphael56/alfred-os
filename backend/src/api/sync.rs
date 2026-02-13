@@ -164,6 +164,78 @@ pub async fn sync_usage(
     }))
 }
 
+/// Refresh Garmin data from mounted volume (/data/garmin/)
+#[utoipa::path(post, path = "/sync/garmin/refresh",
+    responses((status = 200, description = "Garmin data refreshed from files")))]
+pub async fn refresh_garmin(
+    State(pool): State<PgPool>,
+) -> Json<serde_json::Value> {
+    let garmin_path = "/data/garmin/garmin.json";
+    let usage_path = "/data/garmin/usage.json";
+    let mut results = serde_json::Map::new();
+
+    // Sync garmin.json
+    match std::fs::read_to_string(garmin_path) {
+        Ok(content) => {
+            match serde_json::from_str::<GarminSync>(&content) {
+                Ok(data) => {
+                    let mut count = 0u32;
+                    if let Some(ref race) = data.race { insert_metric(&pool, "race", "info", race).await; count += 1; }
+                    if let Some(ref today) = data.today {
+                        if let Some(steps) = today.get("steps").and_then(|v| v.as_i64()) { insert_metric(&pool, "sport", "steps", &serde_json::json!(steps)).await; count += 1; }
+                        if let Some(dist) = today.get("distance").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "daily_km", &serde_json::json!(dist)).await; count += 1; }
+                        if let Some(cal) = today.get("calories").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "calories", &serde_json::json!(cal)).await; count += 1; }
+                        if let Some(stress) = today.get("stress") { insert_metric(&pool, "sport", "stress", stress).await; count += 1; }
+                    }
+                    if let Some(ref hr) = data.heart_rate {
+                        if let Some(resting) = hr.get("resting").and_then(|v| v.as_i64()) { insert_metric(&pool, "sport", "resting_hr", &serde_json::json!(resting)).await; count += 1; }
+                        insert_metric(&pool, "sport", "heart_rate", hr).await; count += 1;
+                    }
+                    if let Some(ref sleep) = data.sleep {
+                        insert_metric(&pool, "sport", "sleep", sleep).await; count += 1;
+                        if let Some(dur) = sleep.get("duration").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "sleep_hours", &serde_json::json!(dur)).await; count += 1; }
+                    }
+                    if let Some(ref fitness) = data.fitness {
+                        if let Some(vo2) = fitness.get("vo2max").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "vo2max", &serde_json::json!(vo2)).await; count += 1; }
+                        insert_metric(&pool, "sport", "fitness", fitness).await; count += 1;
+                    }
+                    if let Some(ref tl) = data.training_load { insert_metric(&pool, "sport", "training_load", tl).await; count += 1; }
+                    if let Some(ref week) = data.week {
+                        insert_metric(&pool, "sport", "weekly_summary", week).await; count += 1;
+                        if let Some(km) = week.get("km").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "weekly_km", &serde_json::json!(km)).await; count += 1; }
+                    }
+                    if let Some(ref rs) = data.running_stats { insert_metric(&pool, "sport", "running_stats", rs).await; count += 1; }
+                    if let Some(ref body) = data.body { insert_metric(&pool, "sport", "body_composition", body).await; count += 1; }
+                    if let Some(ref activities) = data.activities {
+                        for a in activities.iter().take(10) { insert_metric(&pool, "sport", "activity", a).await; count += 1; }
+                    }
+                    results.insert("garmin".to_string(), serde_json::json!({"status": "synced", "metrics": count}));
+                }
+                Err(e) => { results.insert("garmin".to_string(), serde_json::json!({"status": "parse_error", "error": e.to_string()})); }
+            }
+        }
+        Err(e) => { results.insert("garmin".to_string(), serde_json::json!({"status": "file_not_found", "error": e.to_string()})); }
+    }
+
+    // Sync usage.json
+    match std::fs::read_to_string(usage_path) {
+        Ok(content) => {
+            if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                let mut count = 0u32;
+                if let Some(today) = data.get("today") { insert_metric(&pool, "ai", "daily_usage", today).await; count += 1; }
+                if let Some(week) = data.get("week") { insert_metric(&pool, "ai", "weekly_usage", week).await; count += 1; }
+                results.insert("usage".to_string(), serde_json::json!({"status": "synced", "metrics": count}));
+            }
+        }
+        Err(_) => { results.insert("usage".to_string(), serde_json::json!({"status": "skipped"})); }
+    }
+
+    Json(serde_json::json!({
+        "status": "refreshed",
+        "results": results
+    }))
+}
+
 /// Get latest Garmin snapshot (most recent of each key)
 #[utoipa::path(get, path = "/garmin/latest",
     responses((status = 200, description = "Latest Garmin data")))]
