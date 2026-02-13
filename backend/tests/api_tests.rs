@@ -1,4 +1,4 @@
-use axum::{routing::{get, post, put, delete}, Router, Json};
+use axum::{routing::get, Router, Json};
 use tower::ServiceExt;
 use axum::http::{Request, StatusCode};
 use axum::body::Body;
@@ -15,7 +15,7 @@ async fn setup_pool() -> PgPool {
         .expect("Failed to connect to test database")
 }
 
-fn app(pool: PgPool) -> Router {
+fn build_app(pool: PgPool) -> Router {
     Router::new()
         .route("/health", get(health_check))
         .route("/tasks", get(list_tasks).post(create_task))
@@ -24,7 +24,6 @@ fn app(pool: PgPool) -> Router {
         .with_state(pool)
 }
 
-// Re-implement minimal handlers for testing (avoiding module import issues)
 async fn health_check() -> Json<Value> {
     Json(serde_json::json!({"status": "operational", "system": "Alfred OS v0.1.0"}))
 }
@@ -102,13 +101,21 @@ async fn create_metric(
     (StatusCode::CREATED, Json(serde_json::json!({"id": row.0})))
 }
 
+async fn do_request(pool: PgPool, req: Request<Body>) -> axum::response::Response {
+    build_app(pool).oneshot(req).await.unwrap()
+}
+
+async fn body_json(resp: axum::response::Response) -> Value {
+    let bytes = axum::body::to_bytes(resp.into_body(), 8192).await.unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
 #[tokio::test]
 async fn test_health_check() {
     let pool = setup_pool().await;
-    let app = app(pool);
-    let resp = app.oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap()).await.unwrap();
+    let resp = do_request(pool, Request::builder().uri("/health").body(Body::empty()).unwrap()).await;
     assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()).unwrap();
+    let body = body_json(resp).await;
     assert_eq!(body["status"], "operational");
 }
 
@@ -117,40 +124,45 @@ async fn test_task_crud() {
     let pool = setup_pool().await;
 
     // Create
-    let app = app(pool.clone());
-    let resp = app.oneshot(
+    let resp = do_request(pool.clone(),
         Request::builder()
             .method("POST").uri("/tasks")
             .header("content-type", "application/json")
             .body(Body::from(r#"{"title":"Test integration","priority":3}"#)).unwrap()
-    ).await.unwrap();
+    ).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
-    let body: Value = serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), 1024).await.unwrap()).unwrap();
+    let body = body_json(resp).await;
     let task_id = body["id"].as_str().unwrap().to_string();
 
     // Get
-    let app = app(pool.clone());
-    let resp = app.oneshot(Request::builder().uri(&format!("/tasks/{}", task_id)).body(Body::empty()).unwrap()).await.unwrap();
+    let resp = do_request(pool.clone(),
+        Request::builder().uri(&format!("/tasks/{}", task_id)).body(Body::empty()).unwrap()
+    ).await;
     assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    assert_eq!(body["title"], "Test integration");
 
     // Update
-    let app = app(pool.clone());
-    let resp = app.oneshot(
+    let resp = do_request(pool.clone(),
         Request::builder()
             .method("PUT").uri(&format!("/tasks/{}", task_id))
             .header("content-type", "application/json")
             .body(Body::from(r#"{"status":"done"}"#)).unwrap()
-    ).await.unwrap();
+    ).await;
     assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    assert_eq!(body["status"], "done");
 
     // Delete
-    let app = app(pool.clone());
-    let resp = app.oneshot(Request::builder().method("DELETE").uri(&format!("/tasks/{}", task_id)).body(Body::empty()).unwrap()).await.unwrap();
+    let resp = do_request(pool.clone(),
+        Request::builder().method("DELETE").uri(&format!("/tasks/{}", task_id)).body(Body::empty()).unwrap()
+    ).await;
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     // Verify deleted
-    let app = app(pool.clone());
-    let resp = app.oneshot(Request::builder().uri(&format!("/tasks/{}", task_id)).body(Body::empty()).unwrap()).await.unwrap();
+    let resp = do_request(pool.clone(),
+        Request::builder().uri(&format!("/tasks/{}", task_id)).body(Body::empty()).unwrap()
+    ).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 
@@ -159,28 +171,28 @@ async fn test_metric_create_and_list() {
     let pool = setup_pool().await;
 
     // Create metric
-    let app = app(pool.clone());
-    let resp = app.oneshot(
+    let resp = do_request(pool.clone(),
         Request::builder()
             .method("POST").uri("/metrics")
             .header("content-type", "application/json")
             .body(Body::from(r#"{"category":"test","key":"test_val","value":42}"#)).unwrap()
-    ).await.unwrap();
+    ).await;
     assert_eq!(resp.status(), StatusCode::CREATED);
+    let body = body_json(resp).await;
+    let metric_id = body["id"].as_str().unwrap().to_string();
 
     // List
-    let app = app(pool.clone());
-    let resp = app.oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap()).await.unwrap();
+    let resp = do_request(pool.clone(),
+        Request::builder().uri("/metrics").body(Body::empty()).unwrap()
+    ).await;
     assert_eq!(resp.status(), StatusCode::OK);
-    let body: Vec<Value> = serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), 4096).await.unwrap()).unwrap();
-    assert!(!body.is_empty());
+    let body: Vec<Value> = serde_json::from_slice(
+        &axum::body::to_bytes(resp.into_body(), 8192).await.unwrap()
+    ).unwrap();
+    assert!(body.iter().any(|m| m["id"].as_str() == Some(&metric_id)));
 
     // Cleanup
-    for m in &body {
-        if m["category"] == "test" {
-            sqlx::query("DELETE FROM metrics WHERE id = $1::uuid")
-                .bind(m["id"].as_str().unwrap())
-                .execute(&pool).await.ok();
-        }
-    }
+    sqlx::query("DELETE FROM metrics WHERE id = $1")
+        .bind(uuid::Uuid::parse_str(&metric_id).unwrap())
+        .execute(&pool).await.ok();
 }

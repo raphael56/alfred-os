@@ -12,6 +12,8 @@ services:
       POSTGRES_DB: alfred_core
     volumes:
       - ./persistence/pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     networks:
       - alfred-net
     healthcheck:
