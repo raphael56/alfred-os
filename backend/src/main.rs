@@ -1,34 +1,59 @@
-use axum::{routing::get, Router, Json};
+use axum::{routing::{get, delete}, Router, Json};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 
 mod db;
+mod api;
+
+use api::tasks;
+use api::metrics;
 
 #[tokio::main]
 async fn main() {
-    // 1. Logs
     tracing_subscriber::fmt::init();
 
-    // 2. Database connection
     let pool = db::init_pool().await;
     db::run_migrations(&pool).await;
 
-    // 3. Documentation OpenAPI
     #[derive(OpenApi)]
-    #[openapi(paths(health_check, sys_schema))]
+    #[openapi(
+        paths(
+            health_check,
+            sys_schema,
+            tasks::list_tasks,
+            tasks::create_task,
+            tasks::get_task,
+            tasks::update_task,
+            tasks::delete_task,
+            metrics::list_metrics,
+            metrics::create_metric,
+            metrics::delete_metric,
+        ),
+        components(schemas(
+            tasks::Task,
+            tasks::CreateTask,
+            tasks::UpdateTask,
+            metrics::Metric,
+            metrics::CreateMetric,
+        ))
+    )]
     struct ApiDoc;
 
-    // 4. Router
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/health", get(health_check))
         .route("/sys/schema", get(sys_schema))
+        // Tasks CRUD
+        .route("/tasks", get(tasks::list_tasks).post(tasks::create_task))
+        .route("/tasks/:id", get(tasks::get_task).put(tasks::update_task).delete(tasks::delete_task))
+        // Metrics CRUD
+        .route("/metrics", get(metrics::list_metrics).post(metrics::create_metric))
+        .route("/metrics/:id", delete(metrics::delete_metric))
         .layer(CorsLayer::permissive())
         .with_state(pool);
 
-    // 5. Server
     let port: u16 = std::env::var("SERVER_PORT")
         .unwrap_or_else(|_| "8080".to_string())
         .parse()
@@ -39,7 +64,6 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-/// Health check endpoint
 #[utoipa::path(get, path = "/health", responses((status = 200, description = "System operational")))]
 async fn health_check() -> Json<serde_json::Value> {
     Json(serde_json::json!({
@@ -48,7 +72,6 @@ async fn health_check() -> Json<serde_json::Value> {
     }))
 }
 
-/// System schema introspection for OpenClaw
 #[utoipa::path(get, path = "/sys/schema", responses((status = 200, description = "Database schema")))]
 async fn sys_schema(
     axum::extract::State(pool): axum::extract::State<sqlx::PgPool>,

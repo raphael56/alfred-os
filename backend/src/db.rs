@@ -19,18 +19,23 @@ pub async fn run_migrations(pool: &PgPool) {
         .await
         .ok();
 
-    // Create tables
+    // Create metrics table
     sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS metrics (
+        "CREATE TABLE IF NOT EXISTS metrics (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             category VARCHAR(50) NOT NULL,
             key VARCHAR(100) NOT NULL,
             value JSONB NOT NULL,
             recorded_at TIMESTAMPTZ DEFAULT NOW()
-        );
+        )"
+    )
+    .execute(pool)
+    .await
+    .expect("Failed to create metrics table");
 
-        CREATE TABLE IF NOT EXISTS tasks (
+    // Create tasks table
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS tasks (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             title VARCHAR(255) NOT NULL,
             status VARCHAR(50) DEFAULT 'todo',
@@ -38,20 +43,25 @@ pub async fn run_migrations(pool: &PgPool) {
             tags JSONB,
             due_date TIMESTAMPTZ,
             created_at TIMESTAMPTZ DEFAULT NOW()
-        );
+        )"
+    )
+    .execute(pool)
+    .await
+    .expect("Failed to create tasks table");
 
-        CREATE TABLE IF NOT EXISTS system_knowledge (
+    // Create system_knowledge table
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS system_knowledge (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             content TEXT NOT NULL,
             embedding vector(1536),
             source VARCHAR(100),
             updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        "#,
+        )"
     )
     .execute(pool)
     .await
-    .expect("Failed to run migrations");
+    .expect("Failed to create system_knowledge table");
 
     tracing::info!("Database migrations completed");
 }
