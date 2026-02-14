@@ -9,6 +9,7 @@ const GarminDashboard = dynamic(() => import("@/components/GarminDashboard"), { 
 const SystemMetrics = dynamic(() => import("@/components/SystemMetrics"), { ssr: false });
 const KnowledgeBase = dynamic(() => import("@/components/KnowledgeBase"), { ssr: false });
 const AiUsage = dynamic(() => import("@/components/AiUsage"), { ssr: false });
+const SportHistory = dynamic(() => import("@/components/SportHistory"), { ssr: false });
 
 interface Task {
   id: string;
@@ -311,6 +312,9 @@ export default function Home() {
             ))}
           </div>
         </div>
+
+        {/* Sport History */}
+        <SportHistory />
 
         {/* AI Usage */}
         <AiUsage />

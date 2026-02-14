@@ -5,3 +5,4 @@ pub mod knowledge;
 pub mod alerts;
 pub mod settings;
 pub mod report;
+pub mod history;

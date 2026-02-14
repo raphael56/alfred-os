@@ -8,7 +8,7 @@ mod db;
 mod api;
 mod auth;
 
-use api::{tasks, metrics, sync, knowledge, alerts, settings, report};
+use api::{tasks, metrics, sync, knowledge, alerts, settings, report, history};
 
 #[tokio::main]
 async fn main() {
@@ -31,6 +31,7 @@ async fn main() {
             alerts::check_alerts,
             settings::get_settings, settings::update_settings,
             report::weekly_report,
+            history::metric_history,
         ),
         components(schemas(
             tasks::Task, tasks::CreateTask, tasks::UpdateTask,
@@ -66,6 +67,7 @@ async fn main() {
         .route("/alerts", get(alerts::check_alerts))
         .route("/settings", get(settings::get_settings).put(settings::update_settings))
         .route("/report/weekly", get(report::weekly_report))
+        .route("/metrics/history", get(history::metric_history))
         .layer(middleware::from_fn(auth::auth_middleware))
         .layer(CorsLayer::permissive())
         .with_state(pool);
