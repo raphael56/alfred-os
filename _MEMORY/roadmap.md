@@ -34,7 +34,11 @@
 
 - [x] AI usage dashboard: OpenClaw tokens, cost, models, latency, success rate (weekly + daily)
 
+- [x] Webhook: git post-commit hook auto-ingest _MEMORY modifiés
+- [x] Alertes: GET /alerts (seuils CPU, memory, disk, sleep, training load, overdue tasks)
+- [x] Frontend: bandeau alertes coloré (critical/warning/info)
+
 ## Todo
 - [ ] Authentification (si expose au-dela Tailscale)
-- [ ] Webhook: auto-ingest _MEMORY sur git push
-- [ ] Notifications / alertes (seuils system, training load)
+- [ ] Page /settings ou /admin pour configurer seuils alertes
+- [ ] Export PDF rapport hebdo (sport + system + AI)

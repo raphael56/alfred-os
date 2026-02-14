@@ -37,12 +37,14 @@ export default function Home() {
   const [taskFilter, setTaskFilter] = useState<string>("all");
   const [metricForm, setMetricForm] = useState({ category: "", key: "", value: "" });
   const [showMetricForm, setShowMetricForm] = useState(false);
+  const [alerts, setAlerts] = useState<{level: string; category: string; message: string}[]>([]);
 
   const fetchAll = useCallback(() => {
     fetch("/api/health").then(r => r.json()).then(d => setHealth(d.status)).catch(() => setHealth("offline"));
     fetch("/api/tasks").then(r => r.json()).then(setTasks).catch(() => {});
     fetch("/api/metrics").then(r => r.json()).then(setMetrics).catch(() => {});
     fetch("/api/sys/schema").then(r => r.json()).then(d => setTables(d.tables || [])).catch(() => {});
+    fetch("/api/alerts").then(r => r.json()).then(setAlerts).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -144,6 +146,22 @@ export default function Home() {
           <span className="text-sm text-gray-400">{health}</span>
         </div>
       </header>
+
+      {/* Alerts */}
+      {alerts.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {alerts.map((a, i) => (
+            <div key={i} className={`rounded-lg px-4 py-2 text-sm flex items-center gap-2 ${
+              a.level === "critical" ? "bg-red-500/20 border border-red-500/30 text-red-400" :
+              a.level === "warning" ? "bg-yellow-500/20 border border-yellow-500/30 text-yellow-400" :
+              "bg-blue-500/20 border border-blue-500/30 text-blue-400"
+            }`}>
+              <span className="font-medium">{a.category}</span>
+              <span>{a.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

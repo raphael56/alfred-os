@@ -7,7 +7,7 @@ use tower_http::cors::CorsLayer;
 mod db;
 mod api;
 
-use api::{tasks, metrics, sync, knowledge};
+use api::{tasks, metrics, sync, knowledge, alerts};
 
 #[tokio::main]
 async fn main() {
@@ -27,12 +27,14 @@ async fn main() {
             knowledge::list_knowledge, knowledge::create_knowledge, knowledge::get_knowledge,
             knowledge::delete_knowledge, knowledge::search_knowledge, knowledge::ingest_knowledge,
             knowledge::knowledge_stats, knowledge::rag_query,
+            alerts::check_alerts,
         ),
         components(schemas(
             tasks::Task, tasks::CreateTask, tasks::UpdateTask,
             metrics::Metric, metrics::CreateMetric,
             knowledge::Knowledge, knowledge::CreateKnowledge, knowledge::SearchQuery, knowledge::SearchResult,
             knowledge::RagQuery, knowledge::RagResponse,
+            alerts::Alert,
         ))
     )]
     struct ApiDoc;
@@ -58,6 +60,7 @@ async fn main() {
         .route("/knowledge/ingest", post(knowledge::ingest_knowledge))
         .route("/knowledge/stats", get(knowledge::knowledge_stats))
         .route("/knowledge/query", post(knowledge::rag_query))
+        .route("/alerts", get(alerts::check_alerts))
         .layer(CorsLayer::permissive())
         .with_state(pool);
 
