@@ -33,6 +33,7 @@ services:
       DATABASE_URL: postgres://alfred:${DB_PASSWORD:-alfredsupersecret}@db:5432/alfred_core
       RUST_LOG: info
       SERVER_PORT: "8080"
+      ALFRED_API_TOKEN: ${ALFRED_API_TOKEN:-}
     volumes:
       - ./backend:/app
       - /home/raphael56/alfred-dashboard/data:/data/garmin:ro

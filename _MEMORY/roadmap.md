@@ -41,5 +41,9 @@
 - [x] Settings page /settings (seuils alertes configurables, intervalles sync)
 - [x] Weekly report: GET /report/weekly (tasks, sport, system, AI, knowledge)
 
-## Todo
-- [ ] Authentification (si expose au-dela Tailscale)
+- [x] Auth: middleware token Bearer optionnel (ALFRED_API_TOKEN env var, protège POST/PUT/DELETE)
+
+## Todo (nice to have)
+- [ ] Embeddings auto via API compatible OpenAI (pour semantic search vectorielle)
+- [ ] Mobile-responsive layout amélioré
+- [ ] Historique graphique sport sur 30 jours

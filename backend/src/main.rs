@@ -1,4 +1,4 @@
-use axum::{routing::{get, delete, post}, Router, Json};
+use axum::{routing::{get, delete, post}, Router, Json, middleware};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 use std::net::SocketAddr;
@@ -6,6 +6,7 @@ use tower_http::cors::CorsLayer;
 
 mod db;
 mod api;
+mod auth;
 
 use api::{tasks, metrics, sync, knowledge, alerts, settings, report};
 
@@ -65,6 +66,7 @@ async fn main() {
         .route("/alerts", get(alerts::check_alerts))
         .route("/settings", get(settings::get_settings).put(settings::update_settings))
         .route("/report/weekly", get(report::weekly_report))
+        .layer(middleware::from_fn(auth::auth_middleware))
         .layer(CorsLayer::permissive())
         .with_state(pool);
 
