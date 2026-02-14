@@ -136,17 +136,18 @@ export default function Home() {
   const chartColors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
 
   return (
-    <main className="min-h-screen p-6 max-w-7xl mx-auto">
-      <header className="mb-8 flex items-center justify-between">
+    <main className="min-h-screen p-3 sm:p-6 max-w-7xl mx-auto">
+      <header className="mb-6 sm:mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Alfred OS</h1>
-          <p className="text-gray-500 mt-1">Sovereign Dashboard</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Alfred OS</h1>
+          <p className="text-gray-500 text-sm sm:text-base mt-0.5">Sovereign Dashboard</p>
         </div>
-        <div className="flex items-center gap-4">
-          <a href="/settings" className="text-sm text-gray-500 hover:text-gray-300 transition-colors">Settings</a>
-          <div className="flex items-center gap-2">
-            <span className={`h-3 w-3 rounded-full ${health === "operational" ? "bg-green-500 shadow-lg shadow-green-500/50 animate-pulse" : "bg-red-500 shadow-lg shadow-red-500/50"}`} />
-            <span className="text-sm text-gray-400">{health}</span>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <a href="/settings" className="text-xs sm:text-sm text-gray-500 hover:text-gray-300 transition-colors">Settings</a>
+          <a href="/api/report/weekly" target="_blank" className="text-xs sm:text-sm text-gray-500 hover:text-gray-300 transition-colors hidden sm:block">Report</a>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className={`h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${health === "operational" ? "bg-green-500 shadow-lg shadow-green-500/50 animate-pulse" : "bg-red-500 shadow-lg shadow-red-500/50"}`} />
+            <span className="text-xs sm:text-sm text-gray-400">{health}</span>
           </div>
         </div>
       </header>
@@ -168,7 +169,7 @@ export default function Home() {
       )}
 
       {/* Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
 
         {/* Sport / Garmin Cards */}
         <GarminDashboard />

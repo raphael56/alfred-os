@@ -4,6 +4,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Alfred OS",
   description: "Sovereign Dashboard - Single Pane of Glass",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  themeColor: "#030712",
 };
 
 export default function RootLayout({
