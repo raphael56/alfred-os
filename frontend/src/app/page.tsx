@@ -7,6 +7,7 @@ import TaskStats from "@/components/TaskStats";
 const MetricsChart = dynamic(() => import("@/components/MetricsChart"), { ssr: false });
 const GarminDashboard = dynamic(() => import("@/components/GarminDashboard"), { ssr: false });
 const SystemMetrics = dynamic(() => import("@/components/SystemMetrics"), { ssr: false });
+const KnowledgeBase = dynamic(() => import("@/components/KnowledgeBase"), { ssr: false });
 
 interface Task {
   id: string;
@@ -288,6 +289,9 @@ export default function Home() {
             ))}
           </div>
         </div>
+
+        {/* Knowledge Base */}
+        <KnowledgeBase />
 
         {/* Database Schema */}
         <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6">

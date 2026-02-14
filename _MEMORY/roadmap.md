@@ -25,6 +25,11 @@
 - [x] Cron automatique: systemd timers (garmin 30min, system metrics 5min)
 - [x] _SKILLS/cron-setup.sh
 
+- [x] pgvector: Knowledge Base RAG (CRUD, full-text search, semantic search, bulk ingest, chunking)
+- [x] Frontend: KnowledgeBase component (search/browse views, add entries, delete, source/tag display)
+- [x] _SKILLS/ingest-memory.sh (auto-ingest _MEMORY/*.md files)
+
 ## Todo
 - [ ] Authentification (si expose au-dela Tailscale)
-- [ ] pgvector: mémoire sémantique pour OpenClaw RAG
+- [ ] Endpoint OpenClaw RAG: POST /knowledge/query -> contexte enrichi pour prompt AI
+- [ ] Webhook: auto-ingest _MEMORY sur git push

@@ -7,7 +7,7 @@ use tower_http::cors::CorsLayer;
 mod db;
 mod api;
 
-use api::{tasks, metrics, sync};
+use api::{tasks, metrics, sync, knowledge};
 
 #[tokio::main]
 async fn main() {
@@ -24,10 +24,14 @@ async fn main() {
             tasks::list_tasks, tasks::create_task, tasks::get_task, tasks::update_task, tasks::delete_task,
             metrics::list_metrics, metrics::create_metric, metrics::delete_metric, metrics::collect_system_metrics,
             sync::sync_garmin, sync::sync_usage, sync::garmin_latest, sync::refresh_garmin,
+            knowledge::list_knowledge, knowledge::create_knowledge, knowledge::get_knowledge,
+            knowledge::delete_knowledge, knowledge::search_knowledge, knowledge::ingest_knowledge,
+            knowledge::knowledge_stats,
         ),
         components(schemas(
             tasks::Task, tasks::CreateTask, tasks::UpdateTask,
             metrics::Metric, metrics::CreateMetric,
+            knowledge::Knowledge, knowledge::CreateKnowledge, knowledge::SearchQuery, knowledge::SearchResult,
         ))
     )]
     struct ApiDoc;
@@ -46,6 +50,12 @@ async fn main() {
         .route("/sync/usage", post(sync::sync_usage))
         .route("/sync/garmin/refresh", post(sync::refresh_garmin))
         .route("/garmin/latest", get(sync::garmin_latest))
+        // Knowledge / RAG endpoints
+        .route("/knowledge", get(knowledge::list_knowledge).post(knowledge::create_knowledge))
+        .route("/knowledge/:id", get(knowledge::get_knowledge).delete(knowledge::delete_knowledge))
+        .route("/knowledge/search", post(knowledge::search_knowledge))
+        .route("/knowledge/ingest", post(knowledge::ingest_knowledge))
+        .route("/knowledge/stats", get(knowledge::knowledge_stats))
         .layer(CorsLayer::permissive())
         .with_state(pool);
 

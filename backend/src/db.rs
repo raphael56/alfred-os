@@ -49,19 +49,46 @@ pub async fn run_migrations(pool: &PgPool) {
     .await
     .expect("Failed to create tasks table");
 
-    // Create system_knowledge table
+    // Create system_knowledge table with full-text search support
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS system_knowledge (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             content TEXT NOT NULL,
             embedding vector(1536),
             source VARCHAR(100),
+            tags TEXT[] DEFAULT '{}',
+            metadata JSONB DEFAULT '{}',
+            tsv tsvector GENERATED ALWAYS AS (to_tsvector('french', content)) STORED,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
             updated_at TIMESTAMPTZ DEFAULT NOW()
         )"
     )
     .execute(pool)
     .await
     .expect("Failed to create system_knowledge table");
+
+    // Migrate: add new columns if missing
+    sqlx::query("ALTER TABLE system_knowledge ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}'")
+        .execute(pool).await.ok();
+    sqlx::query("ALTER TABLE system_knowledge ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'")
+        .execute(pool).await.ok();
+    sqlx::query("ALTER TABLE system_knowledge ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()")
+        .execute(pool).await.ok();
+    // tsv generated column - add only if not exists
+    sqlx::query("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='system_knowledge' AND column_name='tsv') THEN ALTER TABLE system_knowledge ADD COLUMN tsv tsvector GENERATED ALWAYS AS (to_tsvector('french', content)) STORED; END IF; END $$")
+        .execute(pool).await.ok();
+
+    // Index for full-text search
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_knowledge_tsv ON system_knowledge USING gin(tsv)")
+        .execute(pool)
+        .await
+        .ok();
+
+    // Index for vector similarity search
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_knowledge_embedding ON system_knowledge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10)")
+        .execute(pool)
+        .await
+        .ok();
 
     tracing::info!("Database migrations completed");
 }
