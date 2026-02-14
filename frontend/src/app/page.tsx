@@ -8,6 +8,7 @@ const MetricsChart = dynamic(() => import("@/components/MetricsChart"), { ssr: f
 const GarminDashboard = dynamic(() => import("@/components/GarminDashboard"), { ssr: false });
 const SystemMetrics = dynamic(() => import("@/components/SystemMetrics"), { ssr: false });
 const KnowledgeBase = dynamic(() => import("@/components/KnowledgeBase"), { ssr: false });
+const AiUsage = dynamic(() => import("@/components/AiUsage"), { ssr: false });
 
 interface Task {
   id: string;
@@ -289,6 +290,9 @@ export default function Home() {
             ))}
           </div>
         </div>
+
+        {/* AI Usage */}
+        <AiUsage />
 
         {/* Knowledge Base */}
         <KnowledgeBase />

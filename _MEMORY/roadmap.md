@@ -32,7 +32,9 @@
 - [x] Endpoint OpenClaw RAG: POST /knowledge/query -> contexte enrichi (knowledge + tasks + system + garmin)
 - [x] Full-text search amélioré: french AND -> simple AND -> simple OR -> ILIKE (4 niveaux de fallback)
 
+- [x] AI usage dashboard: OpenClaw tokens, cost, models, latency, success rate (weekly + daily)
+
 ## Todo
 - [ ] Authentification (si expose au-dela Tailscale)
 - [ ] Webhook: auto-ingest _MEMORY sur git push
-- [ ] AI usage dashboard (OpenClaw tokens, cost, models)
+- [ ] Notifications / alertes (seuils system, training load)
