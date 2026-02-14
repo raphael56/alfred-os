@@ -29,7 +29,10 @@
 - [x] Frontend: KnowledgeBase component (search/browse views, add entries, delete, source/tag display)
 - [x] _SKILLS/ingest-memory.sh (auto-ingest _MEMORY/*.md files)
 
+- [x] Endpoint OpenClaw RAG: POST /knowledge/query -> contexte enrichi (knowledge + tasks + system + garmin)
+- [x] Full-text search amélioré: french AND -> simple AND -> simple OR -> ILIKE (4 niveaux de fallback)
+
 ## Todo
 - [ ] Authentification (si expose au-dela Tailscale)
-- [ ] Endpoint OpenClaw RAG: POST /knowledge/query -> contexte enrichi pour prompt AI
 - [ ] Webhook: auto-ingest _MEMORY sur git push
+- [ ] AI usage dashboard (OpenClaw tokens, cost, models)

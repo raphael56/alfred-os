@@ -26,12 +26,13 @@ async fn main() {
             sync::sync_garmin, sync::sync_usage, sync::garmin_latest, sync::refresh_garmin,
             knowledge::list_knowledge, knowledge::create_knowledge, knowledge::get_knowledge,
             knowledge::delete_knowledge, knowledge::search_knowledge, knowledge::ingest_knowledge,
-            knowledge::knowledge_stats,
+            knowledge::knowledge_stats, knowledge::rag_query,
         ),
         components(schemas(
             tasks::Task, tasks::CreateTask, tasks::UpdateTask,
             metrics::Metric, metrics::CreateMetric,
             knowledge::Knowledge, knowledge::CreateKnowledge, knowledge::SearchQuery, knowledge::SearchResult,
+            knowledge::RagQuery, knowledge::RagResponse,
         ))
     )]
     struct ApiDoc;
@@ -56,6 +57,7 @@ async fn main() {
         .route("/knowledge/search", post(knowledge::search_knowledge))
         .route("/knowledge/ingest", post(knowledge::ingest_knowledge))
         .route("/knowledge/stats", get(knowledge::knowledge_stats))
+        .route("/knowledge/query", post(knowledge::rag_query))
         .layer(CorsLayer::permissive())
         .with_state(pool);
 

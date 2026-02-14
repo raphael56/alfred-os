@@ -178,8 +178,10 @@ pub async fn search_knowledge(
         }).collect());
     }
 
-    // Fallback: PostgreSQL full-text search
-    let results = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<Vec<String>>, f64)>(
+    // Fallback: PostgreSQL full-text search (french AND -> simple AND -> simple OR)
+    let or_query = input.query.split_whitespace().collect::<Vec<_>>().join(" | ");
+
+    let mut results = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<Vec<String>>, f64)>(
         "SELECT id, content, source, tags, ts_rank(tsv, plainto_tsquery('french', $1))::float8 as score FROM system_knowledge WHERE tsv @@ plainto_tsquery('french', $1) ORDER BY score DESC LIMIT $2"
     )
     .bind(&input.query)
@@ -187,6 +189,28 @@ pub async fn search_knowledge(
     .fetch_all(&pool)
     .await
     .unwrap_or_default();
+
+    if results.is_empty() {
+        results = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<Vec<String>>, f64)>(
+            "SELECT id, content, source, tags, ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', $1))::float8 as score FROM system_knowledge WHERE to_tsvector('simple', content) @@ plainto_tsquery('simple', $1) ORDER BY score DESC LIMIT $2"
+        )
+        .bind(&input.query)
+        .bind(limit)
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+    }
+
+    if results.is_empty() {
+        results = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<Vec<String>>, f64)>(
+            "SELECT id, content, source, tags, ts_rank(to_tsvector('simple', content), to_tsquery('simple', $1))::float8 as score FROM system_knowledge WHERE to_tsvector('simple', content) @@ to_tsquery('simple', $1) ORDER BY score DESC LIMIT $2"
+        )
+        .bind(&or_query)
+        .bind(limit)
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+    }
 
     if !results.is_empty() {
         return Json(results.into_iter().map(|(id, content, source, tags, score)| SearchResult {
@@ -297,6 +321,186 @@ pub async fn knowledge_stats(
         "sources": sources.iter().map(|(s, c)| serde_json::json!({"source": s, "count": c})).collect::<Vec<_>>(),
         "top_tags": tags.iter().map(|(t, c)| serde_json::json!({"tag": t, "count": c})).collect::<Vec<_>>(),
     }))
+}
+
+/// RAG query endpoint for OpenClaw: returns enriched context for AI prompts
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub struct RagQuery {
+    pub query: String,
+    /// Optional embedding for semantic search
+    pub embedding: Option<Vec<f32>>,
+    /// Max knowledge results (default 5)
+    pub max_results: Option<i64>,
+    /// Include system metrics snapshot (default true)
+    pub include_metrics: Option<bool>,
+    /// Include active tasks (default true)
+    pub include_tasks: Option<bool>,
+    /// Include Garmin sport data (default true)
+    pub include_garmin: Option<bool>,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct RagResponse {
+    pub context: String,
+    pub sources: Vec<String>,
+    pub knowledge_count: usize,
+    pub tokens_estimate: usize,
+}
+
+#[utoipa::path(post, path = "/knowledge/query", request_body = RagQuery,
+    responses((status = 200, description = "RAG context for AI prompt", body = RagResponse)))]
+pub async fn rag_query(
+    State(pool): State<PgPool>,
+    Json(input): Json<RagQuery>,
+) -> Json<RagResponse> {
+    let max_results = input.max_results.unwrap_or(5);
+    let include_metrics = input.include_metrics.unwrap_or(true);
+    let include_tasks = input.include_tasks.unwrap_or(true);
+    let include_garmin = input.include_garmin.unwrap_or(true);
+
+    let mut context_parts: Vec<String> = Vec::new();
+    let mut sources: Vec<String> = Vec::new();
+
+    // 1. Knowledge search (semantic or full-text)
+    let knowledge_results = if let Some(ref emb) = input.embedding {
+        let emb_str = format!("[{}]", emb.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","));
+        sqlx::query_as::<_, (String, Option<String>, f64)>(
+            "SELECT content, source, 1 - (embedding <=> $1::vector) as score FROM system_knowledge WHERE embedding IS NOT NULL ORDER BY embedding <=> $1::vector LIMIT $2"
+        ).bind(&emb_str).bind(max_results).fetch_all(&pool).await.unwrap_or_default()
+    } else {
+        // Full-text search: french AND -> simple AND -> simple OR -> ILIKE
+        let or_query = input.query.split_whitespace().collect::<Vec<_>>().join(" | ");
+
+        let mut results = sqlx::query_as::<_, (String, Option<String>, f64)>(
+            "SELECT content, source, ts_rank(tsv, plainto_tsquery('french', $1))::float8 as score FROM system_knowledge WHERE tsv @@ plainto_tsquery('french', $1) ORDER BY score DESC LIMIT $2"
+        ).bind(&input.query).bind(max_results).fetch_all(&pool).await.unwrap_or_default();
+
+        if results.is_empty() {
+            results = sqlx::query_as::<_, (String, Option<String>, f64)>(
+                "SELECT content, source, ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', $1))::float8 as score FROM system_knowledge WHERE to_tsvector('simple', content) @@ plainto_tsquery('simple', $1) ORDER BY score DESC LIMIT $2"
+            ).bind(&input.query).bind(max_results).fetch_all(&pool).await.unwrap_or_default();
+        }
+
+        // OR mode: match any term (broader results)
+        if results.is_empty() {
+            results = sqlx::query_as::<_, (String, Option<String>, f64)>(
+                "SELECT content, source, ts_rank(to_tsvector('simple', content), to_tsquery('simple', $1))::float8 as score FROM system_knowledge WHERE to_tsvector('simple', content) @@ to_tsquery('simple', $1) ORDER BY score DESC LIMIT $2"
+            ).bind(&or_query).bind(max_results).fetch_all(&pool).await.unwrap_or_default();
+        }
+
+        if results.is_empty() {
+            let pattern = format!("%{}%", input.query);
+            results = sqlx::query_as::<_, (String, Option<String>, f64)>(
+                "SELECT content, source, 0.5::float8 as score FROM system_knowledge WHERE content ILIKE $1 ORDER BY updated_at DESC LIMIT $2"
+            ).bind(&pattern).bind(max_results).fetch_all(&pool).await.unwrap_or_default();
+        }
+        results
+    };
+
+    let knowledge_count = knowledge_results.len();
+    if !knowledge_results.is_empty() {
+        context_parts.push("## Knowledge Base".to_string());
+        for (content, source, _score) in &knowledge_results {
+            context_parts.push(format!("- {}", content));
+            if let Some(src) = source {
+                sources.push(src.clone());
+            }
+        }
+    }
+
+    // 2. Active tasks
+    if include_tasks {
+        let tasks = sqlx::query_as::<_, (String, String, i32)>(
+            "SELECT title, status, priority FROM tasks WHERE status != 'done' ORDER BY priority DESC, created_at DESC LIMIT 10"
+        ).fetch_all(&pool).await.unwrap_or_default();
+
+        if !tasks.is_empty() {
+            context_parts.push("\n## Active Tasks".to_string());
+            for (title, status, priority) in &tasks {
+                context_parts.push(format!("- [{}] P{} {}", status, priority, title));
+            }
+            sources.push("tasks".to_string());
+        }
+    }
+
+    // 3. System metrics (latest)
+    if include_metrics {
+        let sys_metrics = sqlx::query_as::<_, (String, serde_json::Value)>(
+            "SELECT DISTINCT ON (key) key, value FROM metrics WHERE category = 'system' ORDER BY key, recorded_at DESC"
+        ).fetch_all(&pool).await.unwrap_or_default();
+
+        if !sys_metrics.is_empty() {
+            context_parts.push("\n## System Status".to_string());
+            for (key, value) in &sys_metrics {
+                let display = match value {
+                    serde_json::Value::Number(n) => format!("{}: {}", key, n),
+                    serde_json::Value::Object(obj) => {
+                        let parts: Vec<String> = obj.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+                        format!("{}: {}", key, parts.join(", "))
+                    }
+                    _ => format!("{}: {}", key, value),
+                };
+                context_parts.push(format!("- {}", display));
+            }
+            sources.push("system_metrics".to_string());
+        }
+    }
+
+    // 4. Garmin sport snapshot
+    if include_garmin {
+        let sport_keys = &["vo2max", "resting_hr", "sleep_hours", "weekly_km", "training_load"];
+        let mut sport_lines = Vec::new();
+
+        for key in sport_keys {
+            let row = sqlx::query_as::<_, (serde_json::Value,)>(
+                "SELECT value FROM metrics WHERE category = 'sport' AND key = $1 ORDER BY recorded_at DESC LIMIT 1"
+            ).bind(*key).fetch_optional(&pool).await.ok().flatten();
+
+            if let Some((val,)) = row {
+                let display = match &val {
+                    serde_json::Value::Number(n) => format!("{}: {}", key, n),
+                    serde_json::Value::Object(obj) => {
+                        let parts: Vec<String> = obj.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+                        format!("{}: {}", key, parts.join(", "))
+                    }
+                    _ => format!("{}: {}", key, val),
+                };
+                sport_lines.push(format!("- {}", display));
+            }
+        }
+
+        // Race info
+        let race = sqlx::query_as::<_, (serde_json::Value,)>(
+            "SELECT value FROM metrics WHERE category = 'race' AND key = 'info' ORDER BY recorded_at DESC LIMIT 1"
+        ).fetch_optional(&pool).await.ok().flatten();
+        if let Some((val,)) = race {
+            if let Some(name) = val.get("name").and_then(|v| v.as_str()) {
+                let date = val.get("date").and_then(|v| v.as_str()).unwrap_or("?");
+                let dist = val.get("distance").and_then(|v| v.as_str()).unwrap_or("?");
+                sport_lines.push(format!("- Next race: {} ({}) on {}", name, dist, date));
+            }
+        }
+
+        if !sport_lines.is_empty() {
+            context_parts.push("\n## Sport / Garmin".to_string());
+            context_parts.extend(sport_lines);
+            sources.push("garmin".to_string());
+        }
+    }
+
+    let context = context_parts.join("\n");
+    let tokens_estimate = context.len() / 4; // rough estimate
+
+    // Deduplicate sources
+    sources.sort();
+    sources.dedup();
+
+    Json(RagResponse {
+        context,
+        sources,
+        knowledge_count,
+        tokens_estimate,
+    })
 }
 
 fn chunk_text(text: &str, chunk_size: usize) -> Vec<String> {
