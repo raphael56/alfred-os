@@ -43,7 +43,11 @@
 
 - [x] Auth: middleware token Bearer optionnel (ALFRED_API_TOKEN env var, protège POST/PUT/DELETE)
 
+- [x] Historique graphique sport 30 jours (SportHistory avec AreaChart toggle)
+- [x] Mobile responsive (padding, font sizes, viewport meta)
+- [x] Blueprint et context.md mis à jour
+
 ## Todo (nice to have)
-- [ ] Embeddings auto via API compatible OpenAI (pour semantic search vectorielle)
-- [ ] Mobile-responsive layout amélioré
-- [ ] Historique graphique sport sur 30 jours
+- [ ] Embeddings auto via API compatible OpenAI
+- [ ] Dark/light mode toggle
+- [ ] Export CSV des métriques
