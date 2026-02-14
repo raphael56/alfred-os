@@ -4,3 +4,4 @@ pub mod sync;
 pub mod knowledge;
 pub mod alerts;
 pub mod settings;
+pub mod report;

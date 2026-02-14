@@ -38,7 +38,8 @@
 - [x] Alertes: GET /alerts (seuils CPU, memory, disk, sleep, training load, overdue tasks)
 - [x] Frontend: bandeau alertes coloré (critical/warning/info)
 
+- [x] Settings page /settings (seuils alertes configurables, intervalles sync)
+- [x] Weekly report: GET /report/weekly (tasks, sport, system, AI, knowledge)
+
 ## Todo
 - [ ] Authentification (si expose au-dela Tailscale)
-- [ ] Page /settings ou /admin pour configurer seuils alertes
-- [ ] Export PDF rapport hebdo (sport + system + AI)

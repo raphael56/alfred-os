@@ -7,7 +7,7 @@ use tower_http::cors::CorsLayer;
 mod db;
 mod api;
 
-use api::{tasks, metrics, sync, knowledge, alerts, settings};
+use api::{tasks, metrics, sync, knowledge, alerts, settings, report};
 
 #[tokio::main]
 async fn main() {
@@ -29,6 +29,7 @@ async fn main() {
             knowledge::knowledge_stats, knowledge::rag_query,
             alerts::check_alerts,
             settings::get_settings, settings::update_settings,
+            report::weekly_report,
         ),
         components(schemas(
             tasks::Task, tasks::CreateTask, tasks::UpdateTask,
@@ -63,6 +64,7 @@ async fn main() {
         .route("/knowledge/query", post(knowledge::rag_query))
         .route("/alerts", get(alerts::check_alerts))
         .route("/settings", get(settings::get_settings).put(settings::update_settings))
+        .route("/report/weekly", get(report::weekly_report))
         .layer(CorsLayer::permissive())
         .with_state(pool);
 
