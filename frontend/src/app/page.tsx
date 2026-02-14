@@ -141,9 +141,12 @@ export default function Home() {
           <h1 className="text-3xl font-bold tracking-tight">Alfred OS</h1>
           <p className="text-gray-500 mt-1">Sovereign Dashboard</p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className={`h-3 w-3 rounded-full ${health === "operational" ? "bg-green-500 shadow-lg shadow-green-500/50 animate-pulse" : "bg-red-500 shadow-lg shadow-red-500/50"}`} />
-          <span className="text-sm text-gray-400">{health}</span>
+        <div className="flex items-center gap-4">
+          <a href="/settings" className="text-sm text-gray-500 hover:text-gray-300 transition-colors">Settings</a>
+          <div className="flex items-center gap-2">
+            <span className={`h-3 w-3 rounded-full ${health === "operational" ? "bg-green-500 shadow-lg shadow-green-500/50 animate-pulse" : "bg-red-500 shadow-lg shadow-red-500/50"}`} />
+            <span className="text-sm text-gray-400">{health}</span>
+          </div>
         </div>
       </header>
 
