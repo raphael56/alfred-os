@@ -30,7 +30,7 @@ async fn main() {
             knowledge::knowledge_stats, knowledge::rag_query,
             alerts::check_alerts,
             settings::get_settings, settings::update_settings,
-            report::weekly_report,
+            report::weekly_report, report::export_csv,
             history::metric_history,
         ),
         components(schemas(
@@ -67,6 +67,7 @@ async fn main() {
         .route("/alerts", get(alerts::check_alerts))
         .route("/settings", get(settings::get_settings).put(settings::update_settings))
         .route("/report/weekly", get(report::weekly_report))
+        .route("/export/csv", get(report::export_csv))
         .route("/metrics/history", get(history::metric_history))
         .layer(middleware::from_fn(auth::auth_middleware))
         .layer(CorsLayer::permissive())

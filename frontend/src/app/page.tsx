@@ -144,6 +144,7 @@ export default function Home() {
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
           <a href="/settings" className="text-xs sm:text-sm text-gray-500 hover:text-gray-300 transition-colors">Settings</a>
+          <a href="/api/export/csv" className="text-xs sm:text-sm text-gray-500 hover:text-gray-300 transition-colors hidden sm:block">CSV</a>
           <a href="/api/report/weekly" target="_blank" className="text-xs sm:text-sm text-gray-500 hover:text-gray-300 transition-colors hidden sm:block">Report</a>
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className={`h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${health === "operational" ? "bg-green-500 shadow-lg shadow-green-500/50 animate-pulse" : "bg-red-500 shadow-lg shadow-red-500/50"}`} />

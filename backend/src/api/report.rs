@@ -1,5 +1,6 @@
-use axum::{extract::State, Json};
+use axum::{extract::{State, Query}, Json, response::IntoResponse};
 use sqlx::PgPool;
+use serde::Deserialize;
 
 #[utoipa::path(get, path = "/report/weekly",
     responses((status = 200, description = "Weekly report")))]
@@ -70,4 +71,49 @@ pub async fn weekly_report(
         "knowledge_base_entries": kb_size,
         "race": race.map(|(v,)| v),
     }))
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub struct ExportFilter {
+    pub category: Option<String>,
+    pub days: Option<i32>,
+}
+
+/// Export metrics as CSV
+#[utoipa::path(get, path = "/export/csv", params(ExportFilter),
+    responses((status = 200, description = "CSV export")))]
+pub async fn export_csv(
+    State(pool): State<PgPool>,
+    Query(filter): Query<ExportFilter>,
+) -> impl IntoResponse {
+    let days = filter.days.unwrap_or(30);
+    let interval = format!("{} days", days);
+
+    let rows = match &filter.category {
+        Some(cat) => {
+            sqlx::query_as::<_, (String, String, serde_json::Value, chrono::DateTime<chrono::Utc>)>(
+                "SELECT category, key, value, recorded_at FROM metrics WHERE category = $1 AND recorded_at > NOW() - ($2)::interval ORDER BY recorded_at DESC"
+            ).bind(cat).bind(&interval).fetch_all(&pool).await.unwrap_or_default()
+        }
+        None => {
+            sqlx::query_as::<_, (String, String, serde_json::Value, chrono::DateTime<chrono::Utc>)>(
+                "SELECT category, key, value, recorded_at FROM metrics WHERE recorded_at > NOW() - ($1)::interval ORDER BY recorded_at DESC"
+            ).bind(&interval).fetch_all(&pool).await.unwrap_or_default()
+        }
+    };
+
+    let mut csv = String::from("category,key,value,recorded_at\n");
+    for (cat, key, val, time) in &rows {
+        let val_str = match val {
+            serde_json::Value::Number(n) => n.to_string(),
+            _ => val.to_string().replace(',', ";"),
+        };
+        csv.push_str(&format!("{},{},{},{}\n", cat, key, val_str, time.to_rfc3339()));
+    }
+
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/csv"),
+         (axum::http::header::CONTENT_DISPOSITION, "attachment; filename=\"alfred-metrics.csv\"")],
+        csv,
+    )
 }
