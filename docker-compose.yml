@@ -34,9 +34,12 @@ services:
       RUST_LOG: info
       SERVER_PORT: "8080"
       ALFRED_API_TOKEN: ${ALFRED_API_TOKEN:-}
+      EMBEDDING_API_URL: ${EMBEDDING_API_URL:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     volumes:
       - ./backend:/app
-      - /home/raphael56/alfred-dashboard/data:/data/garmin:ro
+      - ./data/garmin:/data/garmin:ro
     ports:
       - "8080:8080"
     networks:
@@ -52,12 +55,31 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8080
       API_INTERNAL_URL: http://backend:8080
+      # Alfred Bun API (running on host, port 3003)
+      ALFRED_API_INTERNAL_URL: http://host.docker.internal:3003
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     ports:
       - "3002:3000"
+    networks:
+      - alfred-net
+
+  # --- GARMIN SYNC (PYTHON SIDECAR) ---
+  garmin-sync:
+    build: ./garmin-sync
+    container_name: alfred-garmin-sync
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      GARMIN_EMAIL: ${GARMIN_EMAIL:-}
+      GARMIN_PASSWORD: ${GARMIN_PASSWORD:-}
+      BACKEND_URL: http://backend:8080
+      SYNC_INTERVAL: "30"
     networks:
       - alfred-net
 

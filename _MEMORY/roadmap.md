@@ -47,7 +47,8 @@
 - [x] Mobile responsive (padding, font sizes, viewport meta)
 - [x] Blueprint et context.md mis à jour
 
+- [x] Embeddings auto via API compatible OpenAI (create/ingest auto-embed, backfill endpoint, status)
+- [x] Export CSV des métriques
+
 ## Todo (nice to have)
-- [ ] Embeddings auto via API compatible OpenAI
 - [ ] Dark/light mode toggle
-- [ ] Export CSV des métriques

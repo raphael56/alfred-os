@@ -4,6 +4,8 @@ use sqlx::{PgPool, FromRow};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
+use crate::embedding;
+
 #[derive(Debug, Serialize, Deserialize, FromRow, utoipa::ToSchema)]
 pub struct Knowledge {
     pub id: Uuid,
@@ -94,8 +96,14 @@ pub async fn create_knowledge(
     let tags = input.tags.unwrap_or_default();
     let metadata = input.metadata.unwrap_or(serde_json::json!({}));
 
-    let entry = if let Some(ref emb) = input.embedding {
-        let emb_str = format!("[{}]", emb.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","));
+    // Use provided embedding, or auto-generate if API is configured
+    let emb = match input.embedding {
+        Some(ref e) => Some(e.clone()),
+        None => embedding::embed_one(&input.content).await,
+    };
+
+    let entry = if let Some(ref emb_vec) = emb {
+        let emb_str = format!("[{}]", emb_vec.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","));
         sqlx::query_as::<_, Knowledge>(
             "INSERT INTO system_knowledge (content, source, tags, metadata, embedding) VALUES ($1, $2, $3, $4, $5::vector) RETURNING id, content, source, tags, metadata, created_at, updated_at"
         )
@@ -243,6 +251,8 @@ pub async fn ingest_knowledge(
 ) -> Json<serde_json::Value> {
     let mut count = 0u32;
 
+    let mut inserted_ids: Vec<(Uuid, String)> = Vec::new();
+
     if let Some(entries) = input.get("entries").and_then(|v| v.as_array()) {
         for entry in entries {
             let content = entry.get("content").and_then(|v| v.as_str()).unwrap_or("");
@@ -254,17 +264,18 @@ pub async fn ingest_knowledge(
                 .unwrap_or_default();
             let metadata = entry.get("metadata").cloned().unwrap_or(serde_json::json!({}));
 
-            let _ = sqlx::query(
-                "INSERT INTO system_knowledge (content, source, tags, metadata) VALUES ($1, $2, $3, $4)"
+            if let Ok(row) = sqlx::query_as::<_, (Uuid,)>(
+                "INSERT INTO system_knowledge (content, source, tags, metadata) VALUES ($1, $2, $3, $4) RETURNING id"
             )
             .bind(content)
             .bind(source)
             .bind(&tags)
             .bind(&metadata)
-            .execute(&pool)
-            .await;
-
-            count += 1;
+            .fetch_one(&pool)
+            .await {
+                inserted_ids.push((row.0, content.to_string()));
+                count += 1;
+            }
         }
     }
 
@@ -276,16 +287,30 @@ pub async fn ingest_knowledge(
         let chunks = chunk_text(text, chunk_size);
         for (i, chunk) in chunks.iter().enumerate() {
             let meta = serde_json::json!({"chunk_index": i, "total_chunks": chunks.len()});
-            let _ = sqlx::query(
-                "INSERT INTO system_knowledge (content, source, tags, metadata) VALUES ($1, $2, $3, $4)"
+            if let Ok(row) = sqlx::query_as::<_, (Uuid,)>(
+                "INSERT INTO system_knowledge (content, source, tags, metadata) VALUES ($1, $2, $3, $4) RETURNING id"
             )
             .bind(chunk)
             .bind(source)
             .bind(&vec!["auto-chunk".to_string()])
             .bind(&meta)
-            .execute(&pool)
-            .await;
-            count += 1;
+            .fetch_one(&pool)
+            .await {
+                inserted_ids.push((row.0, chunk.clone()));
+                count += 1;
+            }
+        }
+    }
+
+    // Auto-embed inserted entries in batches of 16
+    if embedding::is_configured() && !inserted_ids.is_empty() {
+        for batch in inserted_ids.chunks(16) {
+            let texts: Vec<String> = batch.iter().map(|(_, t)| t.clone()).collect();
+            if let Some(embeddings) = embedding::embed_texts(&texts).await {
+                for (emb, (id, _)) in embeddings.iter().zip(batch.iter()) {
+                    embedding::store_embedding(&pool, *id, emb).await;
+                }
+            }
         }
     }
 
@@ -501,6 +526,67 @@ pub async fn rag_query(
         knowledge_count,
         tokens_estimate,
     })
+}
+
+/// Check embedding API status and stats
+#[utoipa::path(get, path = "/knowledge/embeddings/status",
+    responses((status = 200, description = "Embedding status")))]
+pub async fn embedding_status(
+    State(pool): State<PgPool>,
+) -> Json<serde_json::Value> {
+    let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM system_knowledge")
+        .fetch_one(&pool).await.unwrap_or(0);
+    let with_embeddings = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM system_knowledge WHERE embedding IS NOT NULL")
+        .fetch_one(&pool).await.unwrap_or(0);
+
+    Json(serde_json::json!({
+        "configured": embedding::is_configured(),
+        "total_entries": total,
+        "with_embeddings": with_embeddings,
+        "without_embeddings": total - with_embeddings,
+    }))
+}
+
+/// Backfill embeddings for entries that don't have them yet
+#[utoipa::path(post, path = "/knowledge/embeddings/backfill",
+    responses((status = 200, description = "Backfill result")))]
+pub async fn backfill_embeddings(
+    State(pool): State<PgPool>,
+) -> Json<serde_json::Value> {
+    if !embedding::is_configured() {
+        return Json(serde_json::json!({
+            "error": "Embedding API not configured. Set EMBEDDING_API_URL env var.",
+            "embedded": 0
+        }));
+    }
+
+    let entries = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, content FROM system_knowledge WHERE embedding IS NULL ORDER BY created_at ASC LIMIT 100"
+    ).fetch_all(&pool).await.unwrap_or_default();
+
+    if entries.is_empty() {
+        return Json(serde_json::json!({
+            "status": "all_embedded",
+            "embedded": 0
+        }));
+    }
+
+    let mut embedded = 0u32;
+    for batch in entries.chunks(16) {
+        let texts: Vec<String> = batch.iter().map(|(_, t)| t.clone()).collect();
+        if let Some(embeddings) = embedding::embed_texts(&texts).await {
+            for (emb, (id, _)) in embeddings.iter().zip(batch.iter()) {
+                embedding::store_embedding(&pool, *id, emb).await;
+                embedded += 1;
+            }
+        }
+    }
+
+    Json(serde_json::json!({
+        "status": "backfill_complete",
+        "embedded": embedded,
+        "remaining": entries.len() as u32 - embedded
+    }))
 }
 
 fn chunk_text(text: &str, chunk_size: usize) -> Vec<String> {

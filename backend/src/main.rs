@@ -7,6 +7,7 @@ use tower_http::cors::CorsLayer;
 mod db;
 mod api;
 mod auth;
+mod embedding;
 
 use api::{tasks, metrics, sync, knowledge, alerts, settings, report, history};
 
@@ -27,7 +28,8 @@ async fn main() {
             sync::sync_garmin, sync::sync_usage, sync::garmin_latest, sync::refresh_garmin,
             knowledge::list_knowledge, knowledge::create_knowledge, knowledge::get_knowledge,
             knowledge::delete_knowledge, knowledge::search_knowledge, knowledge::ingest_knowledge,
-            knowledge::knowledge_stats, knowledge::rag_query,
+            knowledge::knowledge_stats, knowledge::rag_query, knowledge::backfill_embeddings,
+            knowledge::embedding_status,
             alerts::check_alerts,
             settings::get_settings, settings::update_settings,
             report::weekly_report, report::export_csv,
@@ -64,6 +66,8 @@ async fn main() {
         .route("/knowledge/ingest", post(knowledge::ingest_knowledge))
         .route("/knowledge/stats", get(knowledge::knowledge_stats))
         .route("/knowledge/query", post(knowledge::rag_query))
+        .route("/knowledge/embeddings/backfill", post(knowledge::backfill_embeddings))
+        .route("/knowledge/embeddings/status", get(knowledge::embedding_status))
         .route("/alerts", get(alerts::check_alerts))
         .route("/settings", get(settings::get_settings).put(settings::update_settings))
         .route("/report/weekly", get(report::weekly_report))

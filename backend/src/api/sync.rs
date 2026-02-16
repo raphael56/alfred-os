@@ -21,6 +21,36 @@ pub struct GarminSync {
     pub body: Option<serde_json::Value>,
 }
 
+/// UPSERT: delete the most recent entry for this category+key, then insert the new value.
+/// This prevents infinite duplicate accumulation while keeping a natural history
+/// (one entry per sync cycle rather than hundreds of identical rows).
+async fn upsert_metric(pool: &PgPool, category: &str, key: &str, value: &serde_json::Value) {
+    // Delete only the latest record for this category+key
+    sqlx::query(
+        "DELETE FROM metrics WHERE id = (
+            SELECT id FROM metrics WHERE category = $1 AND key = $2
+            ORDER BY recorded_at DESC LIMIT 1
+        )"
+    )
+    .bind(category)
+    .bind(key)
+    .execute(pool)
+    .await
+    .ok();
+
+    // Insert the fresh value
+    sqlx::query(
+        "INSERT INTO metrics (category, key, value) VALUES ($1, $2, $3)"
+    )
+    .bind(category)
+    .bind(key)
+    .bind(value)
+    .execute(pool)
+    .await
+    .ok();
+}
+
+/// Simple insert (used for metrics where we want to keep full history)
 async fn insert_metric(pool: &PgPool, category: &str, key: &str, value: &serde_json::Value) {
     sqlx::query(
         "INSERT INTO metrics (category, key, value) VALUES ($1, $2, $3)"
@@ -33,7 +63,7 @@ async fn insert_metric(pool: &PgPool, category: &str, key: &str, value: &serde_j
     .ok();
 }
 
-/// Ingest Garmin JSON data into metrics
+/// Ingest Garmin JSON data into metrics (with UPSERT to avoid duplicates)
 #[utoipa::path(post, path = "/sync/garmin",
     responses((status = 200, description = "Garmin data synced")))]
 pub async fn sync_garmin(
@@ -44,26 +74,26 @@ pub async fn sync_garmin(
 
     // Race info
     if let Some(ref race) = data.race {
-        insert_metric(&pool, "race", "info", race).await;
+        upsert_metric(&pool, "race", "info", race).await;
         count += 1;
     }
 
     // Today stats
     if let Some(ref today) = data.today {
         if let Some(steps) = today.get("steps").and_then(|v| v.as_i64()) {
-            insert_metric(&pool, "sport", "steps", &serde_json::json!(steps)).await;
+            upsert_metric(&pool, "sport", "steps", &serde_json::json!(steps)).await;
             count += 1;
         }
         if let Some(dist) = today.get("distance").and_then(|v| v.as_f64()) {
-            insert_metric(&pool, "sport", "daily_km", &serde_json::json!(dist)).await;
+            upsert_metric(&pool, "sport", "daily_km", &serde_json::json!(dist)).await;
             count += 1;
         }
         if let Some(cal) = today.get("calories").and_then(|v| v.as_f64()) {
-            insert_metric(&pool, "sport", "calories", &serde_json::json!(cal)).await;
+            upsert_metric(&pool, "sport", "calories", &serde_json::json!(cal)).await;
             count += 1;
         }
         if let Some(stress) = today.get("stress") {
-            insert_metric(&pool, "sport", "stress", stress).await;
+            upsert_metric(&pool, "sport", "stress", stress).await;
             count += 1;
         }
     }
@@ -71,18 +101,18 @@ pub async fn sync_garmin(
     // Heart rate
     if let Some(ref hr) = data.heart_rate {
         if let Some(resting) = hr.get("resting").and_then(|v| v.as_i64()) {
-            insert_metric(&pool, "sport", "resting_hr", &serde_json::json!(resting)).await;
+            upsert_metric(&pool, "sport", "resting_hr", &serde_json::json!(resting)).await;
             count += 1;
         }
-        insert_metric(&pool, "sport", "heart_rate", hr).await;
+        upsert_metric(&pool, "sport", "heart_rate", hr).await;
         count += 1;
     }
 
     // Sleep
     if let Some(ref sleep) = data.sleep {
-        insert_metric(&pool, "sport", "sleep", sleep).await;
+        upsert_metric(&pool, "sport", "sleep", sleep).await;
         if let Some(dur) = sleep.get("duration").and_then(|v| v.as_f64()) {
-            insert_metric(&pool, "sport", "sleep_hours", &serde_json::json!(dur)).await;
+            upsert_metric(&pool, "sport", "sleep_hours", &serde_json::json!(dur)).await;
             count += 1;
         }
         count += 1;
@@ -91,24 +121,24 @@ pub async fn sync_garmin(
     // Fitness (VO2max)
     if let Some(ref fitness) = data.fitness {
         if let Some(vo2) = fitness.get("vo2max").and_then(|v| v.as_f64()) {
-            insert_metric(&pool, "sport", "vo2max", &serde_json::json!(vo2)).await;
+            upsert_metric(&pool, "sport", "vo2max", &serde_json::json!(vo2)).await;
             count += 1;
         }
-        insert_metric(&pool, "sport", "fitness", fitness).await;
+        upsert_metric(&pool, "sport", "fitness", fitness).await;
         count += 1;
     }
 
     // Training load
     if let Some(ref tl) = data.training_load {
-        insert_metric(&pool, "sport", "training_load", tl).await;
+        upsert_metric(&pool, "sport", "training_load", tl).await;
         count += 1;
     }
 
     // Week summary
     if let Some(ref week) = data.week {
-        insert_metric(&pool, "sport", "weekly_summary", week).await;
+        upsert_metric(&pool, "sport", "weekly_summary", week).await;
         if let Some(km) = week.get("km").and_then(|v| v.as_f64()) {
-            insert_metric(&pool, "sport", "weekly_km", &serde_json::json!(km)).await;
+            upsert_metric(&pool, "sport", "weekly_km", &serde_json::json!(km)).await;
             count += 1;
         }
         count += 1;
@@ -116,18 +146,22 @@ pub async fn sync_garmin(
 
     // Running stats
     if let Some(ref rs) = data.running_stats {
-        insert_metric(&pool, "sport", "running_stats", rs).await;
+        upsert_metric(&pool, "sport", "running_stats", rs).await;
         count += 1;
     }
 
     // Body composition
     if let Some(ref body) = data.body {
-        insert_metric(&pool, "sport", "body_composition", body).await;
+        upsert_metric(&pool, "sport", "body_composition", body).await;
         count += 1;
     }
 
-    // Individual activities
+    // Activities: clear old activities then insert fresh ones
     if let Some(ref activities) = data.activities {
+        sqlx::query("DELETE FROM metrics WHERE category = 'sport' AND key = 'activity'")
+            .execute(&pool)
+            .await
+            .ok();
         for a in activities.iter().take(10) {
             insert_metric(&pool, "sport", "activity", a).await;
             count += 1;
@@ -150,11 +184,11 @@ pub async fn sync_usage(
     let mut count = 0;
 
     if let Some(today) = data.get("today") {
-        insert_metric(&pool, "ai", "daily_usage", today).await;
+        upsert_metric(&pool, "ai", "daily_usage", today).await;
         count += 1;
     }
     if let Some(week) = data.get("week") {
-        insert_metric(&pool, "ai", "weekly_usage", week).await;
+        upsert_metric(&pool, "ai", "weekly_usage", week).await;
         count += 1;
     }
 
@@ -180,33 +214,35 @@ pub async fn refresh_garmin(
             match serde_json::from_str::<GarminSync>(&content) {
                 Ok(data) => {
                     let mut count = 0u32;
-                    if let Some(ref race) = data.race { insert_metric(&pool, "race", "info", race).await; count += 1; }
+                    if let Some(ref race) = data.race { upsert_metric(&pool, "race", "info", race).await; count += 1; }
                     if let Some(ref today) = data.today {
-                        if let Some(steps) = today.get("steps").and_then(|v| v.as_i64()) { insert_metric(&pool, "sport", "steps", &serde_json::json!(steps)).await; count += 1; }
-                        if let Some(dist) = today.get("distance").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "daily_km", &serde_json::json!(dist)).await; count += 1; }
-                        if let Some(cal) = today.get("calories").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "calories", &serde_json::json!(cal)).await; count += 1; }
-                        if let Some(stress) = today.get("stress") { insert_metric(&pool, "sport", "stress", stress).await; count += 1; }
+                        if let Some(steps) = today.get("steps").and_then(|v| v.as_i64()) { upsert_metric(&pool, "sport", "steps", &serde_json::json!(steps)).await; count += 1; }
+                        if let Some(dist) = today.get("distance").and_then(|v| v.as_f64()) { upsert_metric(&pool, "sport", "daily_km", &serde_json::json!(dist)).await; count += 1; }
+                        if let Some(cal) = today.get("calories").and_then(|v| v.as_f64()) { upsert_metric(&pool, "sport", "calories", &serde_json::json!(cal)).await; count += 1; }
+                        if let Some(stress) = today.get("stress") { upsert_metric(&pool, "sport", "stress", stress).await; count += 1; }
                     }
                     if let Some(ref hr) = data.heart_rate {
-                        if let Some(resting) = hr.get("resting").and_then(|v| v.as_i64()) { insert_metric(&pool, "sport", "resting_hr", &serde_json::json!(resting)).await; count += 1; }
-                        insert_metric(&pool, "sport", "heart_rate", hr).await; count += 1;
+                        if let Some(resting) = hr.get("resting").and_then(|v| v.as_i64()) { upsert_metric(&pool, "sport", "resting_hr", &serde_json::json!(resting)).await; count += 1; }
+                        upsert_metric(&pool, "sport", "heart_rate", hr).await; count += 1;
                     }
                     if let Some(ref sleep) = data.sleep {
-                        insert_metric(&pool, "sport", "sleep", sleep).await; count += 1;
-                        if let Some(dur) = sleep.get("duration").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "sleep_hours", &serde_json::json!(dur)).await; count += 1; }
+                        upsert_metric(&pool, "sport", "sleep", sleep).await; count += 1;
+                        if let Some(dur) = sleep.get("duration").and_then(|v| v.as_f64()) { upsert_metric(&pool, "sport", "sleep_hours", &serde_json::json!(dur)).await; count += 1; }
                     }
                     if let Some(ref fitness) = data.fitness {
-                        if let Some(vo2) = fitness.get("vo2max").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "vo2max", &serde_json::json!(vo2)).await; count += 1; }
-                        insert_metric(&pool, "sport", "fitness", fitness).await; count += 1;
+                        if let Some(vo2) = fitness.get("vo2max").and_then(|v| v.as_f64()) { upsert_metric(&pool, "sport", "vo2max", &serde_json::json!(vo2)).await; count += 1; }
+                        upsert_metric(&pool, "sport", "fitness", fitness).await; count += 1;
                     }
-                    if let Some(ref tl) = data.training_load { insert_metric(&pool, "sport", "training_load", tl).await; count += 1; }
+                    if let Some(ref tl) = data.training_load { upsert_metric(&pool, "sport", "training_load", tl).await; count += 1; }
                     if let Some(ref week) = data.week {
-                        insert_metric(&pool, "sport", "weekly_summary", week).await; count += 1;
-                        if let Some(km) = week.get("km").and_then(|v| v.as_f64()) { insert_metric(&pool, "sport", "weekly_km", &serde_json::json!(km)).await; count += 1; }
+                        upsert_metric(&pool, "sport", "weekly_summary", week).await; count += 1;
+                        if let Some(km) = week.get("km").and_then(|v| v.as_f64()) { upsert_metric(&pool, "sport", "weekly_km", &serde_json::json!(km)).await; count += 1; }
                     }
-                    if let Some(ref rs) = data.running_stats { insert_metric(&pool, "sport", "running_stats", rs).await; count += 1; }
-                    if let Some(ref body) = data.body { insert_metric(&pool, "sport", "body_composition", body).await; count += 1; }
+                    if let Some(ref rs) = data.running_stats { upsert_metric(&pool, "sport", "running_stats", rs).await; count += 1; }
+                    if let Some(ref body) = data.body { upsert_metric(&pool, "sport", "body_composition", body).await; count += 1; }
                     if let Some(ref activities) = data.activities {
+                        sqlx::query("DELETE FROM metrics WHERE category = 'sport' AND key = 'activity'")
+                            .execute(&pool).await.ok();
                         for a in activities.iter().take(10) { insert_metric(&pool, "sport", "activity", a).await; count += 1; }
                     }
                     results.insert("garmin".to_string(), serde_json::json!({"status": "synced", "metrics": count}));
@@ -222,8 +258,8 @@ pub async fn refresh_garmin(
         Ok(content) => {
             if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
                 let mut count = 0u32;
-                if let Some(today) = data.get("today") { insert_metric(&pool, "ai", "daily_usage", today).await; count += 1; }
-                if let Some(week) = data.get("week") { insert_metric(&pool, "ai", "weekly_usage", week).await; count += 1; }
+                if let Some(today) = data.get("today") { upsert_metric(&pool, "ai", "daily_usage", today).await; count += 1; }
+                if let Some(week) = data.get("week") { upsert_metric(&pool, "ai", "weekly_usage", week).await; count += 1; }
                 results.insert("usage".to_string(), serde_json::json!({"status": "synced", "metrics": count}));
             }
         }
