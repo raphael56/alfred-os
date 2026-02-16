@@ -66,6 +66,47 @@ export const forgetMemory = (key: string) =>
 // Stats
 export const getStats = () => api<AlfredStats>("/api/stats");
 
+// Google Workspace
+export interface GmailEmail {
+  id: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  date: string | null;
+}
+
+export interface GoogleTask {
+  id: string;
+  title: string;
+  due: string | null;
+  notes: string | null;
+  status: string;
+  overdue: boolean;
+}
+
+export interface DriveFile {
+  id: string;
+  name: string;
+  type: string;
+  modified: string | null;
+  url: string | null;
+}
+
+export const getGmail = (limit = 10) =>
+  api<{ emails: GmailEmail[]; count: number }>(`/api/google/gmail?limit=${limit}`);
+export const refreshGmail = () =>
+  api<{ emails: GmailEmail[]; count: number }>("/api/google/gmail/refresh", { method: "POST" });
+
+export const getGoogleTasks = () =>
+  api<{ tasks: GoogleTask[]; count: number }>("/api/google/tasks");
+export const refreshGoogleTasks = () =>
+  api<{ tasks: GoogleTask[]; count: number }>("/api/google/tasks/refresh", { method: "POST" });
+
+export const getDrive = (limit = 15) =>
+  api<{ files: DriveFile[]; count: number }>(`/api/google/drive?limit=${limit}`);
+export const refreshDrive = () =>
+  api<{ files: DriveFile[]; count: number }>("/api/google/drive/refresh", { method: "POST" });
+
 // Chat
 export const chat = (message: string): Promise<string> =>
   api<{ reply: string }>("/api/chat", {
