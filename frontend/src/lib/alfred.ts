@@ -66,6 +66,35 @@ export const forgetMemory = (key: string) =>
 // Stats
 export const getStats = () => api<AlfredStats>("/api/stats");
 
+// Routines
+export interface RoutineCard {
+  id: number;
+  category: string;
+  category_label: string;
+  title: string;
+  summary: string;
+  bullets: string[];
+  sources: string[];
+  pinned: boolean;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface RoutineStatus {
+  category: string;
+  label: string;
+  generated: boolean;
+}
+
+export const getRoutines = () =>
+  api<{ cards: RoutineCard[]; status: RoutineStatus[]; count: number }>("/api/routines");
+export const pinRoutine = (id: number, pinned: boolean) =>
+  api<{ ok: boolean }>(`/api/routines/${id}/pin`, { method: "POST", body: JSON.stringify({ pinned }) });
+export const deleteRoutine = (id: number) =>
+  api<{ ok: boolean }>(`/api/routines/${id}`, { method: "DELETE" });
+export const generateRoutines = () =>
+  api<{ message: string }>("/api/routines/generate", { method: "POST" });
+
 // Google Workspace
 export interface GmailEmail {
   id: string;
