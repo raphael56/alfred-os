@@ -47,10 +47,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 // Tasks
-export const getTasks = () => api<AlfredTask[]>("/api/tasks");
+export const getTasks = () =>
+  api<{ tasks: AlfredTask[]; stats: unknown }>("/api/tasks").then((r) => r.tasks);
 
 // Crons
-export const getCrons = () => api<AlfredCron[]>("/api/crons");
+export const getCrons = () =>
+  api<{ crons: AlfredCron[]; stats: unknown }>("/api/crons").then((r) => r.crons);
 export const createCron = (data: { name: string; schedule: string; description: string }) =>
   api<AlfredCron>("/api/crons", { method: "POST", body: JSON.stringify(data) });
 export const toggleCron = (id: number, enabled: boolean) =>
@@ -142,3 +144,60 @@ export const chat = (message: string): Promise<string> =>
     method: "POST",
     body: JSON.stringify({ message }),
   }).then((r) => r.reply);
+
+// Home Assistant
+export interface HaDomainSummary {
+  domain: string;
+  total: number;
+  active: number;
+}
+
+export interface HaEntity {
+  entity_id: string;
+  state: string;
+  name: string;
+  attributes: Record<string, unknown>;
+  last_changed: string;
+}
+
+export const getHaStates = () =>
+  api<{ summary: HaDomainSummary[]; total: number }>("/api/homeassistant/states");
+export const getHaDomain = (domain: string) =>
+  api<{ entities: HaEntity[]; domain: string }>(`/api/homeassistant/domain/${domain}`);
+export const callHaService = (domain: string, service: string, entity_id?: string, data?: Record<string, unknown>) =>
+  api<{ ok: boolean }>("/api/homeassistant/service", {
+    method: "POST",
+    body: JSON.stringify({ domain, service, entity_id, data }),
+  });
+export const refreshHaStates = () =>
+  api<{ ok: boolean; total: number }>("/api/homeassistant/states/refresh", { method: "POST" });
+
+// n8n
+export interface N8nWorkflow {
+  id: string;
+  name: string;
+  active: boolean;
+  updatedAt: string;
+  tags?: Array<{ id: string; name: string }>;
+}
+
+export interface N8nExecution {
+  id: string;
+  workflowId: string;
+  workflowName?: string;
+  status: "success" | "error" | "running" | "waiting" | string;
+  startedAt: string;
+  stoppedAt?: string;
+}
+
+export const getN8nWorkflows = () =>
+  api<{ workflows: N8nWorkflow[]; count: number }>("/api/n8n/workflows");
+export const getN8nExecutions = (limit = 20) =>
+  api<{ executions: N8nExecution[]; count: number }>(`/api/n8n/executions?limit=${limit}`);
+export const triggerN8nWorkflow = (id: string, data?: Record<string, unknown>) =>
+  api<{ ok: boolean; executionId?: string }>(`/api/n8n/workflows/${id}/trigger`, {
+    method: "POST",
+    body: JSON.stringify(data ?? {}),
+  });
+export const refreshN8nWorkflows = () =>
+  api<{ ok: boolean; count: number }>("/api/n8n/workflows/refresh", { method: "POST" });
