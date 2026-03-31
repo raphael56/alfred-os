@@ -52,10 +52,11 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    env_file:
+      - .env
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8080
       API_INTERNAL_URL: http://backend:8080
-      # Alfred Bun API (running on host, port 3003)
       ALFRED_API_INTERNAL_URL: http://host.docker.internal:3003
     extra_hosts:
       - "host.docker.internal:host-gateway"
