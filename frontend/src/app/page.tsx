@@ -13,16 +13,36 @@ interface GarminSnapshot {
   weekly_km?: number;
 }
 
+interface MorningPayload {
+  date: string;
+  modjo: string;
+  tasks: string;
+  created_at: string;
+}
+
+interface DigestPayload {
+  stats: { important: number; info: number; newsletter: number; newsletterUnsub: number; spam: number };
+  important: string[];
+  created_at: string;
+}
+
+interface BriefingData {
+  morning: MorningPayload | null;
+  digest: DigestPayload | null;
+}
+
 export default function Home() {
   const { health } = useHealth();
   const { tasks } = useTasks();
   const { alerts } = useAlerts();
   const [garmin, setGarmin] = useState<GarminSnapshot | null>(null);
   const [metricCount, setMetricCount] = useState(0);
+  const [briefing, setBriefing] = useState<BriefingData | null>(null);
 
   useEffect(() => {
     fetch("/api/garmin/latest").then(r => r.json()).then(setGarmin).catch(() => {});
     fetch("/api/metrics").then(r => r.json()).then((d: any[]) => setMetricCount(d.length)).catch(() => {});
+    fetch("/alfred-api/api/briefing/latest").then(r => r.json()).then(setBriefing).catch(() => {});
   }, []);
 
   const doneTasks = tasks.filter(t => t.status === "done").length;
@@ -109,6 +129,54 @@ export default function Home() {
           }
         />
       </div>
+
+      {/* Briefing du jour */}
+      {briefing && (briefing.morning || briefing.digest) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {briefing.morning && (
+            <div className="rounded-2xl border border-indigo-500/20 bg-gray-900 p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Briefing Matin</h2>
+                <span className="text-xs text-gray-600">{briefing.morning.created_at.slice(11, 16)}</span>
+              </div>
+              <p className="text-sm text-indigo-300 italic mb-3">"{briefing.morning.modjo}"</p>
+              <div className="space-y-1">
+                {briefing.morning.tasks.split("\n").filter(Boolean).slice(0, 4).map((t, i) => (
+                  <div key={i} className="text-xs text-gray-400 truncate">{t.replace(/[*_]/g, "")}</div>
+                ))}
+              </div>
+            </div>
+          )}
+          {briefing.digest && (
+            <div className="rounded-2xl border border-purple-500/20 bg-gray-900 p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Digest Mail</h2>
+                <span className="text-xs text-gray-600">{briefing.digest.created_at.slice(11, 16)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {[
+                  { label: "Importants", value: briefing.digest.stats.important, color: "text-red-400" },
+                  { label: "Info archivés", value: briefing.digest.stats.info, color: "text-gray-400" },
+                  { label: "Newsletters", value: briefing.digest.stats.newsletter, color: "text-purple-400" },
+                  { label: "Spams", value: briefing.digest.stats.spam, color: "text-orange-400" },
+                ].map(s => (
+                  <div key={s.label} className="rounded-lg bg-gray-800 px-3 py-2 flex items-center justify-between">
+                    <span className="text-xs text-gray-500">{s.label}</span>
+                    <span className={`text-sm font-bold ${s.color}`}>{s.value}</span>
+                  </div>
+                ))}
+              </div>
+              {briefing.digest.important.length > 0 && (
+                <div className="space-y-1">
+                  {briefing.digest.important.slice(0, 3).map((line, i) => (
+                    <div key={i} className="text-xs text-gray-400 truncate">{line.replace(/[*_•]/g, "").trim()}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Quick info row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
